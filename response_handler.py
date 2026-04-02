@@ -27,18 +27,23 @@ Retorno response_handler:
 -1 -> ABORT, deve abortar a transferência
 """
 def response_handler(response: dict, target_msg_num: int) -> int:
-    type = response.get("tipo", -1)
+    type = response.get("tipo", -1) 
     msg_num = response.get("num_msg", -1)
 
-    if type == ACK:
-        # Se recebeu ACK da mensagem que está esperando, então continua envio.
-        if msg_num == target_msg_num:
-            return NEXT
-        else:
-            logger.warning(f"ACK de pacote duplicado ou atrasado (esperado {target_msg_num}, recebido {msg_num})")
-            return NEXT
+    # Primeiro procura na tabela de erros, para evitar comparações desnecessárias com if´s e else´s
+    dispatch = ERROR_DISPATCH.get(type)
+    if dispatch:
+        action, msg = dispatch
+        logger.error(msg)
+        return action
 
-    elif type == NACK:
+    # Verifica respostas ACK ou NACK
+    if type == ACK:
+        if msg_num != target_msg_num:
+            logger.warning(f"ACK de pacote duplicado ou atrasado (esperado {target_msg_num}, recebido {msg_num})")
+        return NEXT
+
+    if type == NACK:
         if msg_num == target_msg_num:
             logger.warning(f"Bloco {msg_num} corrompido de acordo com o servidor. Re-enviando")
             return RETRY
@@ -46,8 +51,6 @@ def response_handler(response: dict, target_msg_num: int) -> int:
             logger.warning(f"Erro em pacote ({msg_num})")
             return NEXT
 
-    action, msg = ERROR_DISPATCH.get(type, (ABORT, "Erro inesperado"))
-
-    logger.error(msg)
-    
-    return action
+    # Se não identificar, o sistema não sabe lidar com essa resposta.
+    logger.error(f"Tipo de resposta desconhecido: {type}")
+    return ABORT
