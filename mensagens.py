@@ -44,7 +44,7 @@ def build_con_init_msg() -> bytearray:
 def build_data_msg(msg_num: int, num_conexao: int, payload: bytearray) -> bytearray:
     header = build_header(tipo=DATA_MSG, num_msg=msg_num, num_conexao=num_conexao)
     message = bytearray()
-    message.extend(header)
+    message.extend(header) # adiciona os bytes na lista
     message.extend(payload)
     return message
 

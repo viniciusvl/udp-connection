@@ -40,21 +40,21 @@ def response_handler(response: dict, target_msg_num: int) -> int:
     # Verifica respostas ACK ou NACK
     if type == ACK:
         if msg_num != target_msg_num:
-            # ACK atrasado ou duplicado de pacote anterior ignorar e aguardar o correto
+            # ACK atrasado ou duplicado de pacote anterior ignora e aguarda o correto
             logger.warning(f"ACK de pacote duplicado ou atrasado (esperado {target_msg_num}, recebido {msg_num}). Reenviando.")
             return RETRY
         return NEXT
 
     if type == NACK:
         if msg_num == target_msg_num:
-            # Servidor recebeu o número correto mas o conteúdo estava corrompido
+            # Recebeu o número esperado mas corrompido
             logger.warning(f"Bloco {msg_num} corrompido de acordo com o servidor. Re-enviando")
             return RETRY
         else:
-            # Servidor esperava outro número de mensagem — duplicata detectada, avançar
+            # Esperava outro número de mensagem, então é duplicado
             logger.warning(f"NACK: servidor esperava msg_num={msg_num}, cliente enviou {target_msg_num}. Avançando.")
             return NEXT
 
-    # Se não identificar, o sistema não sabe lidar com essa resposta.
+    # Se não identificar, o sistema não sabe lidar com essa resposta e encerra conexão.
     logger.error(f"Tipo de resposta desconhecido: {type}")
     return ABORT

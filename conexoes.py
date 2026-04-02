@@ -14,7 +14,8 @@ def create_socket_udp(timeout: float) -> socket.socket:
 def open_connection(sock: socket.socket, server_addr: tuple[str, int]) -> int:
     # Monta binário da mensagem que estabelece a conexão
     msg_handshake = build_con_init_msg()
-    
+    # se não conseguir resposta do servidor, o cliente irá tentar limit_attempts vezes
+    # evitar ficar preso infinitamente no estado de "espera"
     limit_attempts = 0
 
     while True:
@@ -29,16 +30,16 @@ def open_connection(sock: socket.socket, server_addr: tuple[str, int]) -> int:
         # Extrai significado da resposta do servidor, já que retorna em binário
         response = parse_response(raw_resp)
 
-        if response["tipo"] == ACK:
+        if response["tipo"] == ACK: # conexão estabelecida
             logger.info(f"ID de Conexão no Servidor: {response['num_conexao']}")
             return response["num_conexao"]
         else:
-            logger.warning("Resposta inesperada ao abrir conexão. Tentando novamente")
+            logger.warning("Erro ao abrir conexão. Tentando novamente")
             limit_attempts += 1
 
 
 def close_connection(sock: socket.socket, num_conexao: int, server_addr: tuple[str, int]) -> bool:
-    """Encerra a conexão e retorna True se o arquivo foi recebido corretamente, False caso contrário."""
+    # Encerra a conexão e retorna True se o arquivo foi recebido corretamente, False se não
     msg_fin = build_fin_msg(num_conexao)
 
     # Para que o cliente não fique tentando fechar conexão infinitamente
@@ -58,9 +59,9 @@ def close_connection(sock: socket.socket, num_conexao: int, server_addr: tuple[s
             sock.close()
             return True
         elif response["tipo"] == NACK:
-            logger.warning("Servidor sinalizou que o arquivo NÃO foi recebido corretamente (NACK).")
-            sock.close()
-            return False
+            logger.warning("Servidor sinalizou NACK ao finalizar. Tentando novamente.")
+            limit_attempts += 1
+            continue
         else:
             logger.error("Resposta inesperada ao encerrar conexão. Tentando novamente.")
 
