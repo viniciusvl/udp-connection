@@ -1,41 +1,37 @@
-import socket
+import logging
 from mensagens import read_file
-from conexoes import open_connection, close_connection
+from conexoes import create_socket_udp, open_connection, close_connection
 from rede import transfer_file
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 def main():
     SERVER_IP = "18.230.108.156"
     SERVER_PORT = 50000
     SERVER_ADDR = (SERVER_IP, SERVER_PORT)
-    
-    try:
-        blocks = read_file("catita.png")
-    except FileNotFoundError:
-        return
+    TIMEOUT_DEFAULT = 1.0
 
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    client_socket.settimeout(1.0)
-    
-    conn_id = open_connection(client_socket, SERVER_ADDR)
-    
-    transfered, logs = transfer_file(client_socket, conn_id, blocks, SERVER_ADDR)
-    
-    if transfered:
-        correctly_closed = close_connection(client_socket, conn_id, SERVER_ADDR)
-        
-        if not correctly_closed:
-            print("NACK recebido.")
-    else:
-        print("Servidor rejeitou a conexão.")
+    # Lê o arquivo
+    file_chunks = read_file("catita.png")
 
-    client_socket.close()
+    # Cria socket UDP
+    client_socket = create_socket_udp(timeout=TIMEOUT_DEFAULT)
+    
+    # Abre conexão e retorna ID da conexão no servidor
+    num_conexao = open_connection(client_socket, SERVER_ADDR)
+    
+    # Transfere arquivo para servidor
+    status_req = transfer_file(client_socket, num_conexao, file_chunks, SERVER_ADDR)
 
-    print(" Stats:")
-    print(f"| Tempo gasto:              {logs.get('tempo', 0)} segundos")
-    print(f"| Blocos despachados:       {logs.get('blocos', 0)} blocos")
-    print(f"| Timeouts:                 {logs.get('timeouts', 0)} pacotes perdidos")
-    print(f"| Nacks:                    {logs.get('nacks', 0)} pacotes corrompidos")
-    print(f"| Retransmissoes:           {logs.get('retransmissoes', 0)} retransmitidos")
+    logger.info(" Stats:")
+    logger.info(f"| Tempo gasto:              {status_req.get('tempo', 0)} segundos")
+    logger.info(f"| Blocos despachados:       {status_req.get('blocos', 0)} blocos")
+    logger.info(f"| Timeouts:                 {status_req.get('timeouts', 0)} pacotes perdidos")
+    logger.info(f"| Nacks:                    {status_req.get('nacks', 0)} pacotes corrompidos")
+    logger.info(f"| Retransmissoes:           {status_req.get('retransmissoes', 0)} retransmitidos")
+
+    close_connection(client_socket, num_conexao, SERVER_ADDR)
 
 if __name__ == "__main__":
     main()
