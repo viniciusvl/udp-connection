@@ -15,23 +15,32 @@ def open_connection(sock: socket.socket, server_addr: tuple[str, int]) -> int:
     # Monta binário da mensagem que estabelece a conexão
     msg_handshake = build_con_init_msg()
     
+    limit_attempts = 0
+
     while True:
+        if limit_attempts > LIMIT_ATTEMPTS_FIN:
+            logger.error("Limite de tentativas para abrir conexão excedido. Encerrando socket abruptamente.")
+            sock.close()
+            raise RuntimeError("Falha ao abrir conexão com o servidor.")
+
         # segundo valor (direita) é a quantidade de timeouts, desnecessário no momento
         raw_resp, _ = send_and_receive(sock, msg_handshake, server_addr)
-        
+
         # Extrai significado da resposta do servidor, já que retorna em binário
         response = parse_response(raw_resp)
-        
+
         if response["tipo"] == ACK:
             logger.info(f"ID de Conexão no Servidor: {response['num_conexao']}")
             return response["num_conexao"]
         else:
             logger.warning("Resposta inesperada ao abrir conexão. Tentando novamente")
+            limit_attempts += 1
 
 
-def close_connection(sock: socket.socket, num_conexao: int, server_addr: tuple[str, int]) -> None:
+def close_connection(sock: socket.socket, num_conexao: int, server_addr: tuple[str, int]) -> bool:
+    """Encerra a conexão e retorna True se o arquivo foi recebido corretamente, False caso contrário."""
     msg_fin = build_fin_msg(num_conexao)
-    
+
     # Para que o cliente não fique tentando fechar conexão infinitamente
     limit_attempts = 0
 
@@ -39,19 +48,20 @@ def close_connection(sock: socket.socket, num_conexao: int, server_addr: tuple[s
         if limit_attempts > LIMIT_ATTEMPTS_FIN:
             logger.error("Limite de tentativas para fechar conexão excedido. Encerrando socket abruptamente.")
             sock.close()
-            return 
+            return False
 
         raw_resp, _ = send_and_receive(sock, msg_fin, server_addr)
         response = parse_response(raw_resp)
-        
-        if response["tipo"] == ACK:
-            logger.info("ACK recebido para o encerramento")
-            sock.close()
 
-            return
-        elif response["tipo"] == NACK: # NACK
-            logger.warning("Servidor recusou o encerramento")
+        if response["tipo"] == ACK:
+            logger.info("Conexão encerrada. Arquivo recebido corretamente pelo servidor.")
+            sock.close()
+            return True
+        elif response["tipo"] == NACK:
+            logger.warning("Servidor sinalizou que o arquivo NÃO foi recebido corretamente (NACK).")
+            sock.close()
+            return False
         else:
-            logger.error("Erro ao encerrar conexão")
+            logger.error("Resposta inesperada ao encerrar conexão. Tentando novamente.")
 
         limit_attempts += 1
